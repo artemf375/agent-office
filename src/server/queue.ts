@@ -153,6 +153,7 @@ export class TaskQueue {
     if (!t) return 'No such task';
     if (t.status !== 'done') return 'That task is still on the queue';
     if (t.issue !== undefined && this.tasks.some((x) => x !== t && x.issue === t.issue && x.status !== 'done')) return `Issue #${t.issue} is already on the queue`;
+    if (this.tasks.filter((t) => t.status !== 'done').length >= MAX_TASKS) return `The queue is full (${MAX_TASKS} tasks)`;
     this.tasks.splice(this.tasks.indexOf(t), 1);
     const fresh: QueueTask = { id: t.id, provider: t.provider, model: t.model, effort: t.effort, issue: t.issue, title: t.title, prompt: t.prompt, addedBy: t.addedBy, owner: t.owner, addedAt: Date.now(), status: 'queued' };
     this.tasks.push(fresh);

@@ -58,6 +58,34 @@ test('queue seats the selected provider and preserves it through completion and 
   assert.equal(f.workers[1].provider, 'opencode');
 });
 
+test('retry respects the active-task capacity without changing a finished task', (t) => {
+  const f = fixture(); t.after(() => f.close());
+  const q = f.open();
+  q.add('Finished task', 'Tester');
+  f.workers[0].status = 'done'; q.onWorker(f.workers[0]);
+  const finishedId = q.state().tasks[0].id;
+
+  // One running task and 99 waiting tasks occupy all 100 active slots.
+  q.add('Running task', 'Tester');
+  q.setLimit(0);
+  for (let i = 0; i < 99; i++) {
+    assert.equal(q.add('Waiting task ' + i, 'Tester'), undefined);
+  }
+  assert.equal(q.add('Overflow', 'Tester'), 'The queue is full (100 tasks)');
+  const before = q.state();
+  const saved = readFileSync(path.join(f.dir, 'queue.json'), 'utf8');
+  assert.equal(q.retry(finishedId), 'The queue is full (100 tasks)');
+  assert.deepEqual(q.state(), before, 'a rejected retry preserves task order and completion details');
+  assert.equal(readFileSync(path.join(f.dir, 'queue.json'), 'utf8'), saved);
+
+  const waiting = q.state().tasks.find((task) => task.status === 'queued')!;
+  assert.equal(q.remove(waiting.id), undefined);
+  assert.equal(q.retry(finishedId), undefined, 'retry succeeds once an active slot is free');
+  assert.equal(q.state().tasks.at(-1)?.id, finishedId);
+  assert.equal(q.state().tasks.at(-1)?.status, 'queued');
+  assert.equal(q.state().tasks.filter((task) => task.status !== 'done').length, 100);
+});
+
 test('queued provider survives restart even when the configured default differs', (t) => {
   const f = fixture(); t.after(() => f.close());
   const q = f.open(); q.setLimit(0);
